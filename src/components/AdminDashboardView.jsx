@@ -31,9 +31,13 @@ import {
   ArrowLeft,
   Network,
   Upload,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Truck,
+  Clock,
+  MapPin,
+  ExternalLink
 } from 'lucide-react';
-import { productApi, authApi, orderApi } from '../services/api';
+import { productApi, authApi, orderApi, shippingApi } from '../services/api';
 import IdentityLookupView from './IdentityLookupView';
 import ArchitectureView from './ArchitectureView';
 
@@ -58,39 +62,37 @@ export default function AdminDashboardView({
   const [products, setProducts] = useState([]);
   const [users, setUsers] = useState([]);
   const [orders, setOrders] = useState([]);
+  const [shippings, setShippings] = useState([]);
+  const [selectedShippingOrder, setSelectedShippingOrder] = useState(null);
+  const [isShippingModalOpen, setIsShippingModalOpen] = useState(false);
+  const [isSavingShipping, setIsSavingShipping] = useState(false);
+  const [shippingForm, setShippingForm] = useState({
+    estadoEnvio: 'ALISTANDO_PEDIDO',
+    courier: 'Olva Courier',
+    numeroGuia: '',
+    notas: ''
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Product Modal State (Create or Edit)
-  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
-  const [editingProduct, setEditingProduct] = useState(null);
-  const [productForm, setProductForm] = useState({
-    name: '',
-    shortName: '',
-    category: 'laptops',
-    categoryLabel: 'Laptops Gamer',
-    price: '',
-    originalPrice: '',
-    stock: 10,
-    sku: '',
-    image: '',
-    tag: '',
-    tagColor: 'indigo',
-    description: '',
-    rating: 5.0,
-    reviewsCount: 0
-  });
-  const [updatingUserId, setUpdatingUserId] = useState(null);
-  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  // Map rápido de envíos por orderId
+  const shippingsMap = React.useMemo(() => {
+    const map = {};
+    shippings.forEach((s) => {
+      if (s.orderId) map[s.orderId] = s;
+    });
+    return map;
+  }, [shippings]);
 
   // Load Initial Data with Promise.allSettled (Resilient to offline services)
   const loadAllData = async () => {
     setIsLoading(true);
     try {
-      const [prodRes, userRes, ordRes] = await Promise.allSettled([
+      const [prodRes, userRes, ordRes, shipRes] = await Promise.allSettled([
         productApi.listarProductos('all', true), // Traer activos e inactivos para el Admin
         authApi.listarUsuarios(),
-        orderApi.listarOrdenes()
+        orderApi.listarOrdenes(),
+        shippingApi.listarEnvios()
       ]);
 
       // 1. Load Products from Product-Service
@@ -107,10 +109,62 @@ export default function AdminDashboardView({
       if (ordRes.status === 'fulfilled' && Array.isArray(ordRes.value?.data)) {
         setOrders(ordRes.value.data);
       }
+
+      // 4. Load Shippings from Shipping-Service
+      if (shipRes.status === 'fulfilled' && Array.isArray(shipRes.value?.data)) {
+        setShippings(shipRes.value.data);
+      }
     } catch (err) {
       console.warn('Error cargando datos de administración:', err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleOpenShippingModal = (order) => {
+    const currentShip = shippingsMap[order.id];
+    setSelectedShippingOrder(order);
+    setShippingForm({
+      estadoEnvio: currentShip?.estadoEnvio || 'ALISTANDO_PEDIDO',
+      courier: currentShip?.courier || 'Olva Courier',
+      numeroGuia: currentShip?.numeroGuia || `OLV-${String(order.id).padStart(6, '0')}`,
+      notas: currentShip?.notas || ''
+    });
+    setIsShippingModalOpen(true);
+  };
+
+  const handleSaveShippingStatus = async (e) => {
+    e.preventDefault();
+    if (!selectedShippingOrder) return;
+    setIsSavingShipping(true);
+    try {
+      await shippingApi.actualizarEstado(selectedShippingOrder.id, shippingForm);
+      showToast(`Despacho de la Orden #${selectedShippingOrder.id} actualizado a "${shippingForm.estadoEnvio}"`, 'success');
+      setIsShippingModalOpen(false);
+      // Refrescar lista de despachos
+      const shipRes = await shippingApi.listarEnvios();
+      if (Array.isArray(shipRes.data)) {
+        setShippings(shipRes.data);
+      }
+    } catch (err) {
+      showToast(`Error al actualizar estado en Shipping-Service: ${err.message}`, 'error');
+    } finally {
+      setIsSavingShipping(false);
+    }
+  };
+
+  const getShippingBadgeInfo = (estado) => {
+    switch (estado) {
+      case 'EN_VERIFICACION':
+        return { label: 'En Verificación', className: 'shipping-badge-verificacion', icon: <Clock size={12} /> };
+      case 'ALISTANDO_PEDIDO':
+        return { label: 'Alistando Pedido', className: 'shipping-badge-almacen', icon: <Package size={12} /> };
+      case 'EN_OLVA_COURIER':
+        return { label: 'En Olva Courier', className: 'shipping-badge-courier', icon: <Truck size={12} /> };
+      case 'ENTREGADO':
+        return { label: 'Entregado', className: 'shipping-badge-entregado', icon: <CheckCircle2 size={12} /> };
+      default:
+        return { label: 'Alistando Pedido', className: 'shipping-badge-almacen', icon: <Package size={12} /> };
     }
   };
 
@@ -807,37 +861,67 @@ export default function AdminDashboardView({
                   <th>DNI / RUC</th>
                   <th>Productos Despachados</th>
                   <th>Total</th>
-                  <th>Estado</th>
+                  <th>Estado de Envío (Shipping-Service)</th>
+                  <th>Courier / Guía</th>
+                  <th className="text-right">Acción</th>
                 </tr>
               </thead>
               <tbody>
-                {orders.map((o) => (
-                  <tr key={o.id}>
-                    <td className="font-mono font-bold text-indigo-400">
-                      ORD-{String(o.id).padStart(5, '0')}
-                    </td>
-                    <td>{o.nombreCliente || 'Cliente'}</td>
-                    <td className="font-mono text-muted">{o.numeroDocumentoCliente || '-'}</td>
-                    <td>
-                      <span className="order-product-tag" title={o.producto}>
-                        {o.producto || 'Hardware variado'}
-                      </span>
-                    </td>
-                    <td>
-                      <span className="font-mono font-bold text-emerald-400">
-                        S/ {Number(o.total || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 })}
-                      </span>
-                    </td>
-                    <td>
-                      <span className="status-badge-pill status-active">
-                        ✓ Despachado
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                {orders.map((o) => {
+                  const ship = shippingsMap[o.id];
+                  const badgeInfo = getShippingBadgeInfo(ship?.estadoEnvio);
+                  return (
+                    <tr key={o.id}>
+                      <td className="font-mono font-bold text-indigo-400">
+                        ORD-{String(o.id).padStart(5, '0')}
+                      </td>
+                      <td>
+                        <div className="font-semibold">{o.nombreCliente || 'Cliente'}</div>
+                        <div className="text-xs text-muted font-mono">{o.direccionCliente || '-'}</div>
+                      </td>
+                      <td className="font-mono text-muted">{o.numeroDocumentoCliente || '-'}</td>
+                      <td>
+                        <span className="order-product-tag" title={o.producto}>
+                          {o.producto || 'Hardware variado'}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="font-mono font-bold text-emerald-400">
+                          S/ {Number(o.total || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 })}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`shipping-badge ${badgeInfo.className}`}>
+                          {badgeInfo.icon}
+                          <span>{badgeInfo.label}</span>
+                        </span>
+                      </td>
+                      <td>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="olva-brand-tag" style={{ width: 'fit-content' }}>
+                            <Truck size={11} /> {ship?.courier || 'Olva Courier'}
+                          </span>
+                          <span className="text-xs font-mono text-muted">
+                            {ship?.numeroGuia || `OLV-${String(o.id).padStart(6, '0')}`}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="text-right">
+                        <button 
+                          className="btn-tracking-action"
+                          onClick={() => handleOpenShippingModal(o)}
+                          title="Gestionar estado y despacho logístico"
+                        >
+                          <Truck size={13} />
+                          <span>Gestionar Envío</span>
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
                 {orders.length === 0 && (
                   <tr>
-                    <td colSpan="6" className="text-center py-8 text-muted">
+                    <td colSpan="8" className="text-center py-8 text-muted">
                       No hay órdenes generadas aún en Order-Service.
                     </td>
                   </tr>
@@ -1069,6 +1153,114 @@ export default function AdminDashboardView({
                 <button type="submit" className="btn-primary">
                   <Save size={16} />
                   <span>{editingProduct ? 'Guardar Cambios' : 'Registrar Producto'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE GESTIÓN DE DESPACHO LOGÍSTICO (SHIPPING-SERVICE) */}
+      {isShippingModalOpen && selectedShippingOrder && (
+        <div className="modal-backdrop" onClick={() => setIsShippingModalOpen(false)}>
+          <div className="admin-product-modal glass-card animate-scale-up" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 540 }}>
+            <div className="admin-modal-header">
+              <div className="flex items-center gap-2">
+                <Truck size={20} className="text-indigo-400" />
+                <h3>Gestión de Despacho • Orden #{selectedShippingOrder.id}</h3>
+              </div>
+              <button className="close-btn" onClick={() => setIsShippingModalOpen(false)}>✕</button>
+            </div>
+
+            <form onSubmit={handleSaveShippingStatus} className="admin-modal-form">
+              <div className="p-3 mb-3 rounded-lg bg-slate-900/60 border border-slate-700/60 flex flex-col gap-1.5 text-xs">
+                <div className="flex justify-between items-center">
+                  <span className="text-muted">Cliente:</span>
+                  <strong className="text-slate-200">{selectedShippingOrder.nombreCliente} ({selectedShippingOrder.numeroDocumentoCliente})</strong>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted">Destino:</span>
+                  <span className="text-slate-300 font-mono">{selectedShippingOrder.direccionCliente || 'Dirección fiscal registrada'}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted">Productos:</span>
+                  <span className="text-slate-300 truncate max-w-xs">{selectedShippingOrder.producto}</span>
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label>Estado del Envío (Shipping-Service)</label>
+                <select
+                  className="form-select font-semibold"
+                  value={shippingForm.estadoEnvio}
+                  onChange={(e) => setShippingForm({ ...shippingForm, estadoEnvio: e.target.value })}
+                  required
+                >
+                  <option value="EN_VERIFICACION">🟡 1. En Verificación (Pago y DNI validados)</option>
+                  <option value="ALISTANDO_PEDIDO">📦 2. Alistando Pedido (Picking & Packing en Almacén)</option>
+                  <option value="EN_OLVA_COURIER">🚚 3. Pedido dejado en Olva Courier (En Ruta)</option>
+                  <option value="ENTREGADO">🟢 4. Entregado al Cliente (Conforme en Domicilio)</option>
+                </select>
+                <p className="text-xs text-muted mt-1">
+                  Al cambiar el estado, se sincroniza en vivo en <code>Shipping-Service</code> y el cliente lo verá en su rastreo.
+                </p>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Empresa Courier</label>
+                  <input
+                    type="text"
+                    placeholder="Olva Courier / Shalom"
+                    value={shippingForm.courier}
+                    onChange={(e) => setShippingForm({ ...shippingForm, courier: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label>N° Guía de Remisión / Tracking</label>
+                  <input
+                    type="text"
+                    className="font-mono font-bold"
+                    placeholder="OLV-000001"
+                    value={shippingForm.numeroGuia}
+                    onChange={(e) => setShippingForm({ ...shippingForm, numeroGuia: e.target.value })}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label>Notas de Seguimiento (Opcional)</label>
+                <textarea
+                  rows="2"
+                  placeholder="Ej. Paquete recepcionado en agencia Olva Los Olivos a las 11:30 AM..."
+                  value={shippingForm.notas}
+                  onChange={(e) => setShippingForm({ ...shippingForm, notas: e.target.value })}
+                />
+              </div>
+
+              <div className="admin-modal-actions mt-4">
+                <button 
+                  type="button" 
+                  className="btn-secondary" 
+                  onClick={() => setIsShippingModalOpen(false)}
+                  disabled={isSavingShipping}
+                >
+                  Cancelar
+                </button>
+                <button type="submit" className="btn-primary" disabled={isSavingShipping}>
+                  {isSavingShipping ? (
+                    <>
+                      <RefreshCw size={15} className="spin-icon" />
+                      <span>Actualizando Shipping-Service...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save size={15} />
+                      <span>Guardar Estado de Envío</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

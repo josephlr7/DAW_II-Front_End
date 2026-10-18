@@ -19,9 +19,15 @@ import {
   ShieldAlert,
   Sparkles,
   Package,
-  Info
+  Info,
+  Truck,
+  Clock,
+  MapPin,
+  ExternalLink,
+  Check
 } from 'lucide-react';
 import { guestOrdersStorage } from '../services/firebase';
+import { shippingApi } from '../services/api';
 
 export default function OrdersDashboardView({ 
   orders = [], 
@@ -34,10 +40,60 @@ export default function OrdersDashboardView({
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedOrderModal, setSelectedOrderModal] = useState(null);
+  const [shippingsMap, setShippingsMap] = useState({});
+  const [selectedTrackingOrder, setSelectedTrackingOrder] = useState(null);
+  const [activeTrackingData, setActiveTrackingData] = useState(null);
+  const [isLoadingTracking, setIsLoadingTracking] = useState(false);
 
   useEffect(() => {
     onRefresh();
+    // Cargar despachos de Shipping-Service
+    shippingApi.listarEnvios().then((res) => {
+      if (Array.isArray(res.data)) {
+        const map = {};
+        res.data.forEach((s) => {
+          if (s.orderId) map[s.orderId] = s;
+        });
+        setShippingsMap(map);
+      }
+    }).catch((err) => {
+      console.warn('Shipping-Service no disponible o inicializando:', err.message);
+    });
   }, []);
+
+  const handleOpenTracking = async (ord) => {
+    setSelectedTrackingOrder(ord);
+    setIsLoadingTracking(true);
+    try {
+      const res = await shippingApi.obtenerPorOrden(ord.id);
+      setActiveTrackingData(res.data);
+    } catch {
+      setActiveTrackingData(shippingsMap[ord.id] || {
+        orderId: ord.id,
+        estadoEnvio: 'ALISTANDO_PEDIDO',
+        courier: 'Olva Courier',
+        numeroGuia: `OLV-${String(ord.id).padStart(6, '0')}`,
+        direccionDestino: ord.direccionCliente || 'Dirección registrada en la compra'
+      });
+    } finally {
+      setIsLoadingTracking(false);
+    }
+  };
+
+  const getShippingBadge = (estado) => {
+    switch (estado) {
+      case 'EN_VERIFICACION':
+        return { label: 'En Verificación', className: 'shipping-badge-verificacion', icon: <Clock size={12} /> };
+      case 'ALISTANDO_PEDIDO':
+        return { label: 'Alistando Pedido', className: 'shipping-badge-almacen', icon: <Package size={12} /> };
+      case 'EN_OLVA_COURIER':
+        return { label: 'En Olva Courier', className: 'shipping-badge-courier', icon: <Truck size={12} /> };
+      case 'ENTREGADO':
+        return { label: 'Entregado', className: 'shipping-badge-entregado', icon: <CheckCircle2 size={12} /> };
+      default:
+        return { label: 'Alistando Pedido', className: 'shipping-badge-almacen', icon: <Package size={12} /> };
+    }
+  };
 
   const isGuest = !currentUser;
   const isAdmin = currentUser?.role === 'ROLE_ADMIN';
@@ -293,13 +349,16 @@ export default function OrdersDashboardView({
                   <th>Documento</th>
                   <th>Detalle de Productos</th>
                   <th className="text-right">Total (PEN)</th>
-                  <th className="text-center">Estado</th>
+                  <th className="text-center">Estado Pago</th>
+                  <th className="text-center">Seguimiento Logístico</th>
                   <th className="text-center">Comprobante SUNAT</th>
                 </tr>
               </thead>
               <tbody>
                 {displayOrders.map((ord) => {
                   const isRuc = ord.numeroDocumentoCliente?.length === 11;
+                  const ship = shippingsMap[ord.id];
+                  const badgeInfo = getShippingBadge(ship?.estadoEnvio);
                   return (
                     <tr key={ord.id} className="order-row-hover">
                       <td className="font-mono font-bold text-indigo-400">
@@ -326,6 +385,22 @@ export default function OrdersDashboardView({
                         <span className="badge badge-emerald">
                           <CheckCircle2 size={12} /> Aprobado
                         </span>
+                      </td>
+                      <td className="text-center">
+                        <div className="flex flex-col items-center gap-1.5">
+                          <span className={`shipping-badge ${badgeInfo.className}`}>
+                            {badgeInfo.icon}
+                            <span>{badgeInfo.label}</span>
+                          </span>
+                          <button
+                            className="btn-tracking-action"
+                            onClick={() => handleOpenTracking(ord)}
+                            title="Ver línea de tiempo y estado en Olva Courier"
+                          >
+                            <Truck size={13} />
+                            <span>Rastrear</span>
+                          </button>
+                        </div>
                       </td>
                       <td className="text-center">
                         <button
@@ -428,6 +503,141 @@ export default function OrdersDashboardView({
               </button>
               <button className="btn-primary" onClick={() => setSelectedOrderModal(null)}>
                 Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE SEGUIMIENTO LOGÍSTICO Y TRACKING (SHIPPING-SERVICE) */}
+      {selectedTrackingOrder && (
+        <div className="modal-backdrop" onClick={() => setSelectedTrackingOrder(null)}>
+          <div className="invoice-modal-card glass-card animate-scale-up" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 640 }}>
+            <div className="modal-header">
+              <div className="flex items-center gap-2">
+                <Truck size={22} className="text-indigo-400" />
+                <div>
+                  <h3 style={{ margin: 0 }}>Seguimiento de Despacho • Pedido #{selectedTrackingOrder.id}</h3>
+                  <div className="text-xs text-muted">Sincronizado en tiempo real vía Shipping-Service</div>
+                </div>
+              </div>
+              <button className="modal-close-btn" onClick={() => setSelectedTrackingOrder(null)}>✕</button>
+            </div>
+
+            <div className="p-4">
+              {isLoadingTracking ? (
+                <div className="text-center py-8">
+                  <RefreshCw size={24} className="spin-icon text-indigo-400 mx-auto mb-2" />
+                  <p className="text-sm text-muted">Consultando estado en Shipping-Service...</p>
+                </div>
+              ) : (
+                <>
+                  {/* Stepper Visual */}
+                  <div className="tracking-stepper-wrapper">
+                    <div className="tracking-stepper">
+                      <div className="stepper-connector-line">
+                        <div 
+                          className="stepper-connector-progress"
+                          style={{
+                            width: (() => {
+                              const st = activeTrackingData?.estadoEnvio;
+                              if (st === 'ENTREGADO') return '100%';
+                              if (st === 'EN_OLVA_COURIER') return '66%';
+                              if (st === 'ALISTANDO_PEDIDO') return '33%';
+                              return '0%';
+                            })()
+                          }}
+                        />
+                      </div>
+
+                      {[
+                        { id: 'EN_VERIFICACION', label: 'Verificación', sublabel: 'Pago y DNI/RUC', icon: <Clock size={16} />, order: 0 },
+                        { id: 'ALISTANDO_PEDIDO', label: 'En Almacén', sublabel: 'Picking & Packing', icon: <Package size={16} />, order: 1 },
+                        { id: 'EN_OLVA_COURIER', label: 'Olva Courier', sublabel: 'En Ruta', icon: <Truck size={16} />, order: 2 },
+                        { id: 'ENTREGADO', label: 'Entregado', sublabel: 'En Domicilio', icon: <Check size={16} />, order: 3 }
+                      ].map((step) => {
+                        const currentStatus = activeTrackingData?.estadoEnvio || 'ALISTANDO_PEDIDO';
+                        const statusOrderMap = { 'EN_VERIFICACION': 0, 'ALISTANDO_PEDIDO': 1, 'EN_OLVA_COURIER': 2, 'ENTREGADO': 3 };
+                        const currentOrder = statusOrderMap[currentStatus] ?? 1;
+                        const isCompleted = step.order < currentOrder;
+                        const isCurrent = step.order === currentOrder;
+
+                        return (
+                          <div 
+                            key={step.id} 
+                            className={`stepper-step ${isCompleted ? 'completed' : ''} ${isCurrent ? 'current' : ''}`}
+                          >
+                            <div className="stepper-icon-circle">
+                              {isCompleted ? <Check size={18} /> : step.icon}
+                            </div>
+                            <span className="stepper-label">{step.label}</span>
+                            <span className="stepper-sublabel">{step.sublabel}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Informacion de la Guía y Courier */}
+                  <div className="tracking-info-grid">
+                    <div className="tracking-info-box">
+                      <div className="info-label">Empresa Transportista</div>
+                      <div className="info-val flex items-center gap-2">
+                        <span className="olva-brand-tag">
+                          <Truck size={13} /> {activeTrackingData?.courier || 'Olva Courier'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="tracking-info-box">
+                      <div className="info-label">N° de Guía / Tracking</div>
+                      <div className="info-val font-mono text-indigo-400 font-bold">
+                        {activeTrackingData?.numeroGuia || `OLV-${String(selectedTrackingOrder.id).padStart(6, '0')}`}
+                      </div>
+                    </div>
+
+                    <div className="tracking-info-box" style={{ gridColumn: 'span 2' }}>
+                      <div className="info-label flex items-center gap-1">
+                        <MapPin size={12} /> Dirección de Entrega Registrada
+                      </div>
+                      <div className="info-val text-sm font-normal text-slate-300">
+                        {activeTrackingData?.direccionDestino || selectedTrackingOrder.direccionCliente || 'Dirección registrada durante la compra'}
+                      </div>
+                    </div>
+
+                    {activeTrackingData?.notas && (
+                      <div className="tracking-info-box" style={{ gridColumn: 'span 2' }}>
+                        <div className="info-label">Notas del Operador Logístico</div>
+                        <div className="info-val text-xs text-amber-300 font-normal italic">
+                          "{activeTrackingData.notas}"
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Alerta de tiempo real */}
+                  <div className="mt-4 p-3 rounded-lg bg-indigo-950/40 border border-indigo-500/20 text-xs text-slate-300 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                      <span>Seguimiento sincronizado con Olva Courier Express Perú</span>
+                    </div>
+                    <a 
+                      href={activeTrackingData?.trackingUrl || `https://www.olvacourier.com/tracking?guia=${activeTrackingData?.numeroGuia || 'OLV-000001'}`} 
+                      target="_blank" 
+                      rel="noreferrer"
+                      className="text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-semibold"
+                    >
+                      <span>Web Olva</span>
+                      <ExternalLink size={12} />
+                    </a>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="modal-actions-bar">
+              <button className="btn-primary w-full" onClick={() => setSelectedTrackingOrder(null)}>
+                Entendido
               </button>
             </div>
           </div>

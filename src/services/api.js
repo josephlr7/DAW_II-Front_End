@@ -345,3 +345,35 @@ export const authApi = {
     localStorage.removeItem('NEXUS_AUTH_USER');
   }
 };
+
+export const shippingApi = {
+  // Listar todos los despachos registrados (Panel Admin)
+  async listarEnvios() {
+    const gateway = getGatewayUrl();
+    const res = await fetchWithTimeout(`${gateway}/api/shipping`);
+    return {
+      data: Array.isArray(res.data) ? res.data : [],
+      durationMs: res.durationMs,
+      status: res.status,
+      ok: true
+    };
+  },
+
+  // Obtener estado de tracking de una orden (Para vista Cliente)
+  async obtenerPorOrden(orderId) {
+    const gateway = getGatewayUrl();
+    const res = await fetchWithTimeout(`${gateway}/api/shipping/order/${orderId}`);
+    return res;
+  },
+
+  // Actualizar estado de despacho (Admin: "ALISTANDO_PEDIDO", "EN_OLVA_COURIER", "ENTREGADO")
+  async actualizarEstado(orderId, { estadoEnvio, courier = 'Olva Courier', numeroGuia, notas }) {
+    const gateway = getGatewayUrl();
+    const res = await fetchWithTimeout(`${gateway}/api/shipping/order/${orderId}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ estadoEnvio, courier, numeroGuia, notas })
+    });
+    return res;
+  }
+};
+
