@@ -1,0 +1,438 @@
+import React, { useState, useEffect } from 'react';
+import { 
+  ClipboardList, 
+  Search, 
+  RefreshCw, 
+  FileText, 
+  Printer, 
+  X, 
+  ShoppingBag, 
+  DollarSign, 
+  CheckCircle2, 
+  User, 
+  Calendar, 
+  ArrowRight, 
+  Download, 
+  Building2, 
+  QrCode,
+  LogIn,
+  ShieldAlert,
+  Sparkles,
+  Package,
+  Info
+} from 'lucide-react';
+import { guestOrdersStorage } from '../services/firebase';
+
+export default function OrdersDashboardView({ 
+  orders = [], 
+  isLoading, 
+  onRefresh, 
+  onNavigateToCatalog, 
+  showToast,
+  currentUser,
+  onOpenAuthModal
+}) {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedOrderModal, setSelectedOrderModal] = useState(null);
+
+  useEffect(() => {
+    onRefresh();
+  }, []);
+
+  const isGuest = !currentUser;
+  const isAdmin = currentUser?.role === 'ROLE_ADMIN';
+
+  // 1. Obtener órdenes de sesión de invitado
+  const guestSessionOrders = guestOrdersStorage.getOrders();
+
+  // 2. Obtener órdenes persistidas del usuario logueado
+  const userStoredOrders = currentUser 
+    ? guestOrdersStorage.getUserOrders(currentUser.email || currentUser.username) 
+    : [];
+
+  // 3. Determinar qué órdenes mostrar según el modo y rol
+  let baseOrders = [];
+
+  if (isAdmin) {
+    // Administrador: puede auditar todas las órdenes registradas en Order-Service
+    baseOrders = orders;
+  } else if (currentUser) {
+    // Cliente logueado: fusionar sus compras locales y coincidencias en la BD
+    const matchedBackend = orders.filter(o => {
+      const uName = (currentUser.username || '').toLowerCase();
+      const emailPrefix = (currentUser.email || '').split('@')[0].toLowerCase();
+      const fullName = (currentUser.fullName || '').toLowerCase();
+      const clientName = (o.nombreCliente || '').toLowerCase();
+      return (
+        (fullName && clientName && (clientName.includes(fullName) || fullName.includes(clientName))) ||
+        (uName && clientName && clientName.includes(uName)) ||
+        (emailPrefix && clientName && clientName.includes(emailPrefix))
+      );
+    });
+
+    const combined = [...userStoredOrders, ...matchedBackend];
+    baseOrders = Array.from(new Map(combined.map(item => [item.id, item])).values());
+  } else {
+    // MODO INVITADO: Privacidad total.
+    // Si ha escrito un N° de pedido o DNI/RUC en el buscador de rastreo, busca en la BD de órdenes
+    const searchClean = searchTerm.trim().toLowerCase();
+    if (searchClean.length >= 1) {
+      baseOrders = orders.filter(o => 
+        String(o.id).toLowerCase() === searchClean || 
+        (o.numeroDocumentoCliente && o.numeroDocumentoCliente.toLowerCase() === searchClean)
+      );
+    } else {
+      // Por defecto solo ve sus compras de esta sesión
+      baseOrders = guestSessionOrders;
+    }
+  }
+
+  // Filtrado adicional si el usuario logueado o admin escribe en la barra
+  const displayOrders = (currentUser || isAdmin) && searchTerm.trim()
+    ? baseOrders.filter((order) => {
+        const term = searchTerm.toLowerCase();
+        return (
+          (order.id && String(order.id).toLowerCase().includes(term)) ||
+          (order.numeroDocumentoCliente && order.numeroDocumentoCliente.toLowerCase().includes(term)) ||
+          (order.nombreCliente && order.nombreCliente.toLowerCase().includes(term)) ||
+          (order.producto && order.producto.toLowerCase().includes(term))
+        );
+      })
+    : baseOrders;
+
+  const totalGastado = displayOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+
+  const handleExportJson = () => {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(displayOrders, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute("href", dataStr);
+    downloadAnchor.setAttribute("download", `mis_pedidos_${Date.now()}.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+    showToast('Historial descargado exitosamente', 'success');
+  };
+
+  return (
+    <div className="orders-dashboard-view animate-fade-in">
+      {/* Top Header */}
+      <div className="view-header-row">
+        <div>
+          <h2>
+            {isAdmin 
+              ? 'Auditoría General de Pedidos (Backoffice)' 
+              : isGuest 
+                ? 'Rastreo de Pedidos • Modo Invitado' 
+                : 'Mis Pedidos & Comprobantes Oficiales'}
+          </h2>
+          <p className="view-subtitle">
+            {isAdmin 
+              ? 'Vista de control administrativo de todas las órdenes persistidas en Order-Service' 
+              : isGuest 
+                ? 'Consulta las compras de esta sesión o rastrea cualquier pedido ingresando tu N° de orden o DNI' 
+                : `Compras registradas a nombre de ${currentUser.fullName || currentUser.username}`}
+          </p>
+        </div>
+
+        <div className="header-actions-flex">
+          <button 
+            className="btn-secondary" 
+            onClick={onRefresh} 
+            disabled={isLoading}
+            title="Refrescar órdenes desde el backend"
+          >
+            <RefreshCw size={15} className={isLoading ? 'spin-icon' : ''} />
+            <span>Refrescar</span>
+          </button>
+          {displayOrders.length > 0 && (
+            <button className="btn-secondary" onClick={handleExportJson}>
+              <Download size={15} />
+              <span>Exportar Data</span>
+            </button>
+          )}
+          <button className="btn-primary" onClick={onNavigateToCatalog}>
+            <ShoppingBag size={15} />
+            <span>Seguir Comprando</span>
+          </button>
+        </div>
+      </div>
+
+      {/* BANNER INFORMATIVO PARA MODO INVITADO */}
+      {isGuest && (
+        <div className="guest-mode-banner glass-card animate-fade-in">
+          <div className="guest-banner-icon">
+            <Info size={24} className="text-cyan-400" />
+          </div>
+          <div className="guest-banner-text">
+            <h4>Estás navegando en Modo Invitado</h4>
+            <p>
+              Por seguridad y privacidad comercial, no se muestra el historial de otros clientes. 
+              Inicia sesión con tu cuenta de <strong>Google</strong> para vincular tus compras automáticamente y acceder a tus comprobantes en cualquier dispositivo.
+            </p>
+          </div>
+          <button 
+            className="btn-google-pill" 
+            onClick={onOpenAuthModal}
+            title="Iniciar sesión con Google para sincronizar compras"
+          >
+            <svg className="google-icon-svg" viewBox="0 0 24 24" width="16" height="16">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+            </svg>
+            <span>Conectar con Google</span>
+          </button>
+        </div>
+      )}
+
+      {/* KPI METRICS (PERSONALIZADAS) */}
+      <div className="kpi-metrics-grid">
+        <div className="metric-card glass-card">
+          <div className="metric-icon-box bg-emerald-glow">
+            <DollarSign size={20} className="text-emerald-400" />
+          </div>
+          <div>
+            <div className="metric-label">{isAdmin ? 'Facturación Global' : 'Monto de Compras'}</div>
+            <div className="metric-value font-mono">
+              S/ {totalGastado.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            <div className="metric-subtext">Comprobantes válidos SUNAT</div>
+          </div>
+        </div>
+
+        <div className="metric-card glass-card">
+          <div className="metric-icon-box bg-indigo-glow">
+            <ClipboardList size={20} className="text-indigo-400" />
+          </div>
+          <div>
+            <div className="metric-label">{isAdmin ? 'Órdenes Globales' : 'Mis Pedidos'}</div>
+            <div className="metric-value font-mono">{displayOrders.length}</div>
+            <div className="metric-subtext">
+              {isAdmin ? 'En base de datos' : isGuest ? 'En sesión de invitado' : 'En tu cuenta'}
+            </div>
+          </div>
+        </div>
+
+        <div className="metric-card glass-card">
+          <div className="metric-icon-box bg-cyan-glow">
+            <User size={20} className="text-cyan-400" />
+          </div>
+          <div>
+            <div className="metric-label">Estado de Sesión</div>
+            <div className="metric-value font-mono" style={{ fontSize: '1.25rem' }}>
+              {isAdmin ? 'ADMINISTRADOR' : isGuest ? 'MODO INVITADO' : 'CLIENTE VERIFICADO'}
+            </div>
+            <div className="metric-subtext">
+              {isAdmin ? 'Acceso total a auditoría' : isGuest ? 'Sin cuenta vinculada' : `@${currentUser.username}`}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* BARRA DE BÚSQUEDA Y TABLA DE PEDIDOS */}
+      <div className="orders-table-card glass-card">
+        <div className="orders-toolbar">
+          <div className="search-box-input">
+            <Search size={18} className="search-icon" />
+            <input
+              type="text"
+              placeholder={isGuest 
+                ? "🔍 Rastrear pedido: Ingresa tu N° de orden (ej. 1) o tu DNI/RUC..." 
+                : "Buscar en mis pedidos por N° de orden, producto o documento..."}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="table-search-input"
+            />
+            {searchTerm && (
+              <button className="clear-btn" onClick={() => setSearchTerm('')}>✕</button>
+            )}
+          </div>
+          <div className="orders-count-label">
+            {displayOrders.length} {displayOrders.length === 1 ? 'pedido encontrado' : 'pedidos encontrados'}
+          </div>
+        </div>
+
+        {displayOrders.length === 0 ? (
+          <div className="no-orders-box">
+            <Package size={52} className="text-secondary opacity-30 mb-3" />
+            {isGuest ? (
+              <>
+                <h4>No tienes pedidos registrados en esta sesión de invitado</h4>
+                <p>
+                  Si compraste anteriormente, escribe arriba tu <strong>N° de Pedido</strong> o tu <strong>DNI</strong> para localizarlo en tiempo real.
+                </p>
+                <div className="mt-4 flex items-center justify-center gap-3 flex-wrap">
+                  <button className="btn-primary" onClick={onNavigateToCatalog}>
+                    <ShoppingBag size={15} />
+                    <span>Explorar Catálogo</span>
+                  </button>
+                  <button className="btn-secondary" onClick={onOpenAuthModal}>
+                    <LogIn size={15} />
+                    <span>Iniciar Sesión / Google</span>
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h4>Aún no registras pedidos en tu cuenta</h4>
+                <p>Realiza tu primera compra para ver tus boletas o facturas electrónicas de la SUNAT aquí.</p>
+                <button className="btn-primary mt-4" onClick={onNavigateToCatalog}>
+                  Ir a la Tienda
+                </button>
+              </>
+            )}
+          </div>
+        ) : (
+          <div className="table-responsive">
+            <table className="orders-data-table">
+              <thead>
+                <tr>
+                  <th>N° Pedido</th>
+                  <th>Cliente / Razón Social</th>
+                  <th>Documento</th>
+                  <th>Detalle de Productos</th>
+                  <th className="text-right">Total (PEN)</th>
+                  <th className="text-center">Estado</th>
+                  <th className="text-center">Comprobante SUNAT</th>
+                </tr>
+              </thead>
+              <tbody>
+                {displayOrders.map((ord) => {
+                  const isRuc = ord.numeroDocumentoCliente?.length === 11;
+                  return (
+                    <tr key={ord.id} className="order-row-hover">
+                      <td className="font-mono font-bold text-indigo-400">
+                        #{ord.id}
+                      </td>
+                      <td>
+                        <div className="client-name font-semibold">{ord.nombreCliente || 'Cliente'}</div>
+                        <div className="client-address text-xs text-secondary">{ord.direccionCliente || 'Lima, Perú'}</div>
+                      </td>
+                      <td>
+                        <span className={`doc-tag ${isRuc ? 'doc-ruc' : 'doc-dni'}`}>
+                          {isRuc ? 'RUC: ' : 'DNI: '} {ord.numeroDocumentoCliente}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="product-summary-cell" title={ord.producto}>
+                          {ord.producto}
+                        </div>
+                      </td>
+                      <td className="text-right font-mono font-bold">
+                        S/ {Number(ord.total || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td className="text-center">
+                        <span className="badge badge-emerald">
+                          <CheckCircle2 size={12} /> Aprobado
+                        </span>
+                      </td>
+                      <td className="text-center">
+                        <button
+                          className="btn-view-voucher"
+                          onClick={() => setSelectedOrderModal(ord)}
+                          title="Ver Comprobante Electrónico SUNAT"
+                        >
+                          <FileText size={15} />
+                          <span>Ver {isRuc ? 'Factura' : 'Boleta'}</span>
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* MODAL DE COMPROBANTE OFICIAL ELECTRÓNICO */}
+      {selectedOrderModal && (
+        <div className="modal-backdrop" onClick={() => setSelectedOrderModal(null)}>
+          <div className="invoice-modal-card glass-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="flex items-center gap-2">
+                <FileText size={20} className="text-indigo-400" />
+                <h3>Comprobante Electrónico Oficial SUNAT</h3>
+              </div>
+              <button className="modal-close-btn" onClick={() => setSelectedOrderModal(null)}>✕</button>
+            </div>
+
+            <div className="modal-body-scrollable">
+              <div className="sunat-invoice-document compact">
+                <div className="invoice-sunat-header">
+                  <div className="invoice-company-info">
+                    <div className="company-logo-text">NEXUS<span>TECH</span> PERÚ</div>
+                    <div className="company-legal-name">NEXUSTECH SOLUTIONS S.A.C.</div>
+                    <div className="company-address">Av. Canaval y Moreyra 450, Piso 8, San Isidro, Lima</div>
+                  </div>
+
+                  <div className="invoice-box-ruc">
+                    <div className="box-ruc-title">R.U.C. 20608934521</div>
+                    <div className="box-invoice-type">
+                      {selectedOrderModal.numeroDocumentoCliente?.length === 11 
+                        ? 'FACTURA ELECTRÓNICA' 
+                        : 'BOLETA DE VENTA ELECTRÓNICA'}
+                    </div>
+                    <div className="box-correlativo font-mono">
+                      {(selectedOrderModal.numeroDocumentoCliente?.length === 11 ? 'F001-0000' : 'B001-0000') + selectedOrderModal.id}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="invoice-client-section">
+                  <div className="client-data-row">
+                    <span className="client-label">Cliente / Razón Social:</span>
+                    <span className="client-val font-semibold">{selectedOrderModal.nombreCliente}</span>
+                  </div>
+                  <div className="client-data-row">
+                    <span className="client-label">RUC / DNI:</span>
+                    <span className="client-val font-mono">{selectedOrderModal.numeroDocumentoCliente}</span>
+                  </div>
+                  <div className="client-data-row">
+                    <span className="client-label">Dirección Fiscal:</span>
+                    <span className="client-val">{selectedOrderModal.direccionCliente || 'Lima, Perú'}</span>
+                  </div>
+                  <div className="client-data-row">
+                    <span className="client-label">Concepto Facturado:</span>
+                    <span className="client-val">{selectedOrderModal.producto}</span>
+                  </div>
+                </div>
+
+                <div className="invoice-totals-footer">
+                  <div className="invoice-qr-box">
+                    <QrCode size={50} />
+                    <span className="text-xs text-secondary">Autorizado mediante Resolución SUNAT</span>
+                  </div>
+                  <div className="invoice-numbers-box">
+                    <div className="invoice-sum-line">
+                      <span>Op. Gravada:</span>
+                      <span className="font-mono">S/ {(selectedOrderModal.total / 1.18).toFixed(2)}</span>
+                    </div>
+                    <div className="invoice-sum-line">
+                      <span>I.G.V. (18%):</span>
+                      <span className="font-mono">S/ {(selectedOrderModal.total - (selectedOrderModal.total / 1.18)).toFixed(2)}</span>
+                    </div>
+                    <div className="invoice-total-line">
+                      <span>IMPORTE TOTAL:</span>
+                      <span className="font-mono">S/ {Number(selectedOrderModal.total).toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="modal-actions-bar">
+              <button className="btn-secondary" onClick={() => window.print()}>
+                <Printer size={16} /> Imprimir Comprobante
+              </button>
+              <button className="btn-primary" onClick={() => setSelectedOrderModal(null)}>
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
