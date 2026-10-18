@@ -1184,85 +1184,245 @@ export default function AdminDashboardView({
 
       {/* MODAL DE GESTIÓN DE DESPACHO LOGÍSTICO (SHIPPING-SERVICE) */}
       {isShippingModalOpen && selectedShippingOrder && (
-        <div className="modal-backdrop" onClick={() => setIsShippingModalOpen(false)}>
-          <div className="admin-product-modal glass-card animate-scale-up" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 540 }}>
+        <div className="admin-modal-backdrop" onClick={() => setIsShippingModalOpen(false)}>
+          <div className="dispatch-modal-box glass-card animate-scale-up" onClick={(e) => e.stopPropagation()}>
             <div className="admin-modal-header">
-              <div className="flex items-center gap-2">
-                <Truck size={20} className="text-indigo-400" />
-                <h3>Gestión de Despacho • Orden #{selectedShippingOrder.id}</h3>
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-indigo-500/15 text-indigo-400 border border-indigo-500/25">
+                  <Truck size={20} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                    Gestión de Despacho Logístico
+                    <span className="badge-modern badge-indigo text-xs">Orden #{selectedShippingOrder.id}</span>
+                  </h3>
+                  <p className="text-xs text-muted">Sincronización en tiempo real con microservicio <code>Shipping-Service</code></p>
+                </div>
               </div>
-              <button className="close-btn" onClick={() => setIsShippingModalOpen(false)}>✕</button>
+              <button className="close-btn" onClick={() => setIsShippingModalOpen(false)}>
+                <X size={18} />
+              </button>
             </div>
 
-            <form onSubmit={handleSaveShippingStatus} className="admin-modal-form">
-              <div className="p-3 mb-3 rounded-lg bg-slate-900/60 border border-slate-700/60 flex flex-col gap-1.5 text-xs">
-                <div className="flex justify-between items-center">
-                  <span className="text-muted">Cliente:</span>
-                  <strong className="text-slate-200">{selectedShippingOrder.nombreCliente} ({selectedShippingOrder.numeroDocumentoCliente})</strong>
+            <form onSubmit={handleSaveShippingStatus} className="admin-modal-body">
+              {/* Tarjeta de Resumen de la Orden */}
+              <div className="dispatch-order-meta">
+                <div className="dispatch-meta-item">
+                  <span className="dispatch-meta-label">
+                    <User size={13} className="text-indigo-400" />
+                    Cliente
+                  </span>
+                  <span className="dispatch-meta-val truncate">
+                    {selectedShippingOrder.nombreCliente || 'Cliente'}
+                  </span>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-muted">Destino:</span>
-                  <span className="text-slate-300 font-mono">{selectedShippingOrder.direccionCliente || 'Dirección fiscal registrada'}</span>
+
+                <div className="dispatch-meta-item">
+                  <span className="dispatch-meta-label">
+                    <Shield size={13} className="text-emerald-400" />
+                    Documento ({selectedShippingOrder.numeroDocumentoCliente?.length === 11 ? 'RUC' : 'DNI'})
+                  </span>
+                  <span className="dispatch-meta-val font-mono text-emerald-300">
+                    {selectedShippingOrder.numeroDocumentoCliente}
+                  </span>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-muted">Productos:</span>
-                  <span className="text-slate-300 truncate max-w-xs">{selectedShippingOrder.producto}</span>
+
+                <div className="dispatch-meta-item full-width">
+                  <span className="dispatch-meta-label">
+                    <MapPin size={13} className="text-amber-400" />
+                    Dirección de Destino
+                  </span>
+                  <span className="dispatch-meta-val text-slate-300">
+                    {selectedShippingOrder.direccionCliente && selectedShippingOrder.direccionCliente !== '-' 
+                      ? selectedShippingOrder.direccionCliente 
+                      : 'Dirección registrada en compra (Entrega a Domicilio / Agencia)'}
+                  </span>
+                </div>
+
+                <div className="dispatch-meta-item full-width">
+                  <span className="dispatch-meta-label">
+                    <Package size={13} className="text-purple-400" />
+                    Artículos en la Orden
+                  </span>
+                  <span className="dispatch-meta-val text-slate-300 text-xs">
+                    {selectedShippingOrder.producto}
+                  </span>
                 </div>
               </div>
 
+              {/* Selector Visual de Estado del Envío */}
               <div className="form-group">
-                <label>Estado del Envío (Shipping-Service)</label>
-                <select
-                  className="form-select font-semibold"
-                  value={shippingForm.estadoEnvio}
-                  onChange={(e) => setShippingForm({ ...shippingForm, estadoEnvio: e.target.value })}
-                  required
-                >
-                  <option value="EN_VERIFICACION">🟡 1. En Verificación (Pago y DNI validados)</option>
-                  <option value="ALISTANDO_PEDIDO">📦 2. Alistando Pedido (Picking & Packing en Almacén)</option>
-                  <option value="EN_OLVA_COURIER">🚚 3. Pedido dejado en Olva Courier (En Ruta)</option>
-                  <option value="ENTREGADO">🟢 4. Entregado al Cliente (Conforme en Domicilio)</option>
-                </select>
-                <p className="text-xs text-muted mt-1">
-                  Al cambiar el estado, se sincroniza en vivo en <code>Shipping-Service</code> y el cliente lo verá en su rastreo.
-                </p>
+                <div className="dispatch-status-selector-label">
+                  <label className="text-sm font-semibold text-slate-200">
+                    Fase del Despacho (Flujo Olva Courier) *
+                  </label>
+                  <span className="text-xs text-indigo-400 font-mono">
+                    {shippingForm.estadoEnvio}
+                  </span>
+                </div>
+
+                <div className="dispatch-status-cards-grid">
+                  {/* Fase 1 */}
+                  <div 
+                    className={`dispatch-status-card status-verificacion ${shippingForm.estadoEnvio === 'EN_VERIFICACION' ? 'active' : ''}`}
+                    onClick={() => setShippingForm({ ...shippingForm, estadoEnvio: 'EN_VERIFICACION' })}
+                  >
+                    <div className="dispatch-card-icon">
+                      <Clock size={16} />
+                    </div>
+                    <div className="dispatch-card-content">
+                      <span className="dispatch-card-title">1. En Verificación</span>
+                      <span className="dispatch-card-desc">Identidad DNI/RUC y pasarela de pago confirmados</span>
+                    </div>
+                  </div>
+
+                  {/* Fase 2 */}
+                  <div 
+                    className={`dispatch-status-card status-almacen ${shippingForm.estadoEnvio === 'ALISTANDO_PEDIDO' ? 'active' : ''}`}
+                    onClick={() => setShippingForm({ ...shippingForm, estadoEnvio: 'ALISTANDO_PEDIDO' })}
+                  >
+                    <div className="dispatch-card-icon">
+                      <Package size={16} />
+                    </div>
+                    <div className="dispatch-card-content">
+                      <span className="dispatch-card-title">2. Alistando Pedido</span>
+                      <span className="dispatch-card-desc">Picking, embalaje y precintado de seguridad</span>
+                    </div>
+                  </div>
+
+                  {/* Fase 3 */}
+                  <div 
+                    className={`dispatch-status-card status-courier ${shippingForm.estadoEnvio === 'EN_OLVA_COURIER' ? 'active' : ''}`}
+                    onClick={() => setShippingForm({ ...shippingForm, estadoEnvio: 'EN_OLVA_COURIER' })}
+                  >
+                    <div className="dispatch-card-icon">
+                      <Truck size={16} />
+                    </div>
+                    <div className="dispatch-card-content">
+                      <span className="dispatch-card-title">3. En Olva Courier</span>
+                      <span className="dispatch-card-desc">Entregado a la agencia / En ruta de distribución</span>
+                    </div>
+                  </div>
+
+                  {/* Fase 4 */}
+                  <div 
+                    className={`dispatch-status-card status-entregado ${shippingForm.estadoEnvio === 'ENTREGADO' ? 'active' : ''}`}
+                    onClick={() => setShippingForm({ ...shippingForm, estadoEnvio: 'ENTREGADO' })}
+                  >
+                    <div className="dispatch-card-icon">
+                      <CheckCircle2 size={16} />
+                    </div>
+                    <div className="dispatch-card-content">
+                      <span className="dispatch-card-title">4. Entregado</span>
+                      <span className="dispatch-card-desc">Recepción conforme en domicilio del cliente</span>
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              <div className="form-row">
+              {/* Fila Courier y Guía de Remisión */}
+              <div className="form-grid-2">
                 <div className="form-group">
-                  <label>Empresa Courier</label>
-                  <input
-                    type="text"
-                    placeholder="Olva Courier / Shalom"
+                  <label>Empresa de Transporte / Courier *</label>
+                  <select
                     value={shippingForm.courier}
                     onChange={(e) => setShippingForm({ ...shippingForm, courier: e.target.value })}
                     required
-                  />
+                  >
+                    <option value="Olva Courier">🚚 Olva Courier (Oficial)</option>
+                    <option value="Shalom Express">📦 Shalom Empresarial</option>
+                    <option value="DHL Express">✈️ DHL Express Perú</option>
+                    <option value="Urbano Express">🚛 Urbano Express</option>
+                    <option value="Motorizado Propio">🛵 Motorizado Express (Lima)</option>
+                  </select>
                 </div>
+
                 <div className="form-group">
-                  <label>N° Guía de Remisión / Tracking</label>
+                  <label className="flex items-center justify-between">
+                    <span>N° Guía de Remisión / Tracking *</span>
+                    <span className="olva-brand-tag">OLVA TRACK</span>
+                  </label>
                   <input
                     type="text"
-                    className="font-mono font-bold"
+                    className="font-mono font-bold text-amber-300"
                     placeholder="OLV-000001"
                     value={shippingForm.numeroGuia}
                     onChange={(e) => setShippingForm({ ...shippingForm, numeroGuia: e.target.value })}
                     required
                   />
+                  {shippingForm.numeroGuia && (
+                    <a 
+                      href={`https://www.olvacourier.com/tracking?guia=${shippingForm.numeroGuia}`} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="dispatch-external-link"
+                    >
+                      <ExternalLink size={12} />
+                      <span>Ver enlace de rastreo en Olva Courier</span>
+                    </a>
+                  )}
                 </div>
               </div>
 
+              {/* Notas de Seguimiento con Plantillas Rápidas */}
               <div className="form-group">
-                <label>Notas de Seguimiento (Opcional)</label>
+                <label className="flex items-center justify-between">
+                  <span>Notas de Seguimiento Logístico (Opcional)</span>
+                  <span className="text-xs text-muted">Clic para agregar nota rápida:</span>
+                </label>
                 <textarea
                   rows="2"
-                  placeholder="Ej. Paquete recepcionado en agencia Olva Los Olivos a las 11:30 AM..."
+                  placeholder="Ej. Paquete recepcionado en agencia Olva Los Olivos a las 11:30 AM con guía sellada..."
                   value={shippingForm.notas}
                   onChange={(e) => setShippingForm({ ...shippingForm, notas: e.target.value })}
                 />
+                
+                <div className="dispatch-quick-chips">
+                  <button
+                    type="button"
+                    className="dispatch-chip-btn"
+                    onClick={() => setShippingForm(prev => ({
+                      ...prev,
+                      notas: (prev.notas ? prev.notas + ' | ' : '') + '📦 Paquete embalado con precinto de seguridad'
+                    }))}
+                  >
+                    + Embalado
+                  </button>
+                  <button
+                    type="button"
+                    className="dispatch-chip-btn"
+                    onClick={() => setShippingForm(prev => ({
+                      ...prev,
+                      notas: (prev.notas ? prev.notas + ' | ' : '') + '🚚 Dejado en ventanilla Olva Courier'
+                    }))}
+                  >
+                    + Dejado en Olva
+                  </button>
+                  <button
+                    type="button"
+                    className="dispatch-chip-btn"
+                    onClick={() => setShippingForm(prev => ({
+                      ...prev,
+                      notas: (prev.notas ? prev.notas + ' | ' : '') + '📍 En unidad de reparto hacia el destino'
+                    }))}
+                  >
+                    + En Reparto
+                  </button>
+                  <button
+                    type="button"
+                    className="dispatch-chip-btn"
+                    onClick={() => setShippingForm(prev => ({
+                      ...prev,
+                      notas: (prev.notas ? prev.notas + ' | ' : '') + '✅ Entregado a titular con DNI verificado'
+                    }))}
+                  >
+                    + Entregado Conforme
+                  </button>
+                </div>
               </div>
 
-              <div className="admin-modal-actions mt-4">
+              {/* Botones de Acción */}
+              <div className="admin-modal-actions mt-3">
                 <button 
                   type="button" 
                   className="btn-secondary" 
