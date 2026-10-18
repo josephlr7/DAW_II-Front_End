@@ -168,6 +168,8 @@ export default function App() {
         onUpdateQty={handleUpdateCartQty}
         onRemoveItem={handleRemoveCartItem}
         onProceedToCheckout={() => setActiveTab('checkout')}
+        currentUser={currentUser}
+        onOpenAuthModal={() => setIsAuthModalOpen(true)}
       />
 
       {/* Main View Area */}
@@ -190,6 +192,7 @@ export default function App() {
             onNavigateToOrders={() => setActiveTab('orders')}
             showToast={showToast}
             currentUser={currentUser}
+            onOpenAuthModal={() => setIsAuthModalOpen(true)}
           />
         )}
 

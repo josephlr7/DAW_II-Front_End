@@ -18,7 +18,8 @@ import {
   Lock, 
   Sparkles,
   ChevronRight,
-  Package
+  Package,
+  LogIn
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { identityApi, orderApi } from '../services/api';
@@ -30,7 +31,8 @@ export default function CheckoutView({
   onNavigateToCatalog, 
   onNavigateToOrders, 
   showToast,
-  currentUser
+  currentUser,
+  onOpenAuthModal
 }) {
   // Productos activos en el Checkout provenientes exclusivamente de la bolsa
   const activeItems = cart;
@@ -122,6 +124,15 @@ export default function CheckoutView({
 
   const handleSubmitOrder = async (e) => {
     e.preventDefault();
+
+    // 0. Si el usuario está en modo invitado, solicitar inicio de sesión obligatorio
+    if (!currentUser) {
+      showToast('Debes iniciar sesión con tu cuenta para procesar tu compra y registrar el comprobante.', 'warning');
+      if (onOpenAuthModal) {
+        onOpenAuthModal();
+      }
+      return;
+    }
 
     const cleanDoc = documento.trim().replace(/\D/g, '');
     if (!cleanDoc) {
@@ -455,6 +466,33 @@ export default function CheckoutView({
               </div>
             </div>
 
+            {/* AVISO DE IDENTIFICACIÓN OBLIGATORIA PARA INVITADOS */}
+            {!currentUser && (
+              <div className="checkout-guest-banner glass-card animate-fade-in">
+                <div className="flex items-center gap-3">
+                  <div className="guest-banner-icon">
+                    <User size={22} className="text-amber-400" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-amber-200">
+                      Modo Invitado: Inicia sesión para completar tu compra
+                    </h4>
+                    <p className="text-xs text-slate-300">
+                      Para emitir tu comprobante SUNAT oficial y habilitar el rastreo de Olva Courier en vivo, debes identificarte con tu cuenta.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn-auth-guest-cta"
+                  onClick={onOpenAuthModal}
+                >
+                  <LogIn size={15} />
+                  <span>Iniciar Sesión / Registrarse</span>
+                </button>
+              </div>
+            )}
+
             {/* PASO 1: DATOS DE FACTURACIÓN (IDENTITY-SERVICE) */}
             <div className="checkout-step-card glass-card">
               <div className="step-card-header">
@@ -761,10 +799,20 @@ export default function CheckoutView({
             <div className="checkout-submit-bar">
               <button
                 type="submit"
-                className="btn-confirm-order"
+                className={`btn-confirm-order ${!currentUser ? 'btn-confirm-guest' : ''}`}
                 disabled={isSubmitting}
               >
-                {isSubmitting ? (
+                {!currentUser ? (
+                  <span className="flex items-center justify-between w-full">
+                    <span className="flex items-center gap-2">
+                      <LogIn size={18} />
+                      <span>Iniciar Sesión para Completar Compra</span>
+                    </span>
+                    <span className="font-mono text-sm opacity-90">
+                      S/ {totalAmount.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </span>
+                ) : isSubmitting ? (
                   <span className="flex items-center gap-2">
                     <span className="spinner-dot" />
                     <span>Orquestando con Microservicios...</span>

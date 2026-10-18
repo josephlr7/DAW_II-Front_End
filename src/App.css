@@ -4718,6 +4718,68 @@
   text-decoration: underline;
 }
 
+/* ==========================================================================
+   CHECKOUT GUEST MODE & MANDATORY LOGIN NOTICE
+   ========================================================================== */
+.checkout-guest-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+  padding: 1.1rem 1.4rem;
+  background: linear-gradient(135deg, rgba(234, 179, 8, 0.12) 0%, rgba(245, 158, 11, 0.05) 100%);
+  border: 1px solid rgba(234, 179, 8, 0.35);
+  border-radius: 14px;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.guest-banner-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: rgba(234, 179, 8, 0.15);
+  border: 1px solid rgba(234, 179, 8, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.btn-auth-guest-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem 1.15rem;
+  background: linear-gradient(135deg, #eab308 0%, #ca8a04 100%);
+  color: #0f172a;
+  border: none;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 15px -3px rgba(234, 179, 8, 0.4);
+}
+
+.btn-auth-guest-cta:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px -3px rgba(234, 179, 8, 0.6);
+  filter: brightness(1.08);
+}
+
+.btn-confirm-guest {
+  background: linear-gradient(135deg, #eab308 0%, #ca8a04 100%) !important;
+  color: #0f172a !important;
+  box-shadow: 0 4px 20px -3px rgba(234, 179, 8, 0.45) !important;
+}
+
+.btn-confirm-guest:hover {
+  filter: brightness(1.1) !important;
+  transform: translateY(-2px) !important;
+}
+
+
 
 
 
