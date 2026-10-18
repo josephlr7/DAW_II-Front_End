@@ -424,18 +424,6 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess, showToast })
               </div>
             </div>
 
-            {/* Security Note on Roles */}
-            <div className="auth-role-info-banner">
-              <div className="flex items-start gap-2">
-                <Shield size={16} className="text-amber-400 mt-0.5" />
-                <div className="auth-role-info-text">
-                  <span className="font-semibold text-slate-200">Rol asignado: Cliente / Usuario (ROLE_USER)</span>
-                  <p className="text-xs text-muted mt-0.5">
-                    Las cuentas públicas se crean con acceso de comprador. Los roles y privilegios de <strong>Administrador</strong> son asignados por un administrador desde el Panel de Control.
-                  </p>
-                </div>
-              </div>
-            </div>
 
             <button 
               type="submit" 
