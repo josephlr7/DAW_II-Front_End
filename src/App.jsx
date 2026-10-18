@@ -14,8 +14,11 @@ import { guestOrdersStorage, signOutFirebase } from './services/firebase';
 import './App.css';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('catalog'); // 'catalog' | 'checkout' | 'orders' | 'identity' | 'architecture' | 'admin'
   const [currentUser, setCurrentUser] = useState(() => authApi.getStoredUser());
+  const [activeTab, setActiveTab] = useState(() => {
+    const u = authApi.getStoredUser();
+    return u?.role === 'ROLE_ADMIN' ? 'admin' : 'catalog';
+  });
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [cart, setCart] = useState([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -196,6 +199,7 @@ export default function App() {
             isLoading={isOrdersLoading}
             onRefresh={fetchOrders}
             onNavigateToCatalog={() => setActiveTab('catalog')}
+            onNavigateToAdmin={() => setActiveTab('admin')}
             showToast={showToast}
             currentUser={currentUser}
             onOpenAuthModal={() => setIsAuthModalOpen(true)}

@@ -17,6 +17,7 @@ import {
   QrCode,
   LogIn,
   ShieldAlert,
+  Shield,
   Sparkles,
   Package,
   Info,
@@ -34,6 +35,7 @@ export default function OrdersDashboardView({
   isLoading, 
   onRefresh, 
   onNavigateToCatalog, 
+  onNavigateToAdmin,
   showToast,
   currentUser,
   onOpenAuthModal
@@ -212,6 +214,64 @@ export default function OrdersDashboardView({
           </button>
         </div>
       </div>
+
+      {/* BANNER DE ACCESO DIRECTO PARA ADMINISTRADOR */}
+      {isAdmin && (
+        <div className="admin-shortcut-alert glass-card animate-fade-in" style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '1.25rem',
+          padding: '1.2rem 1.5rem',
+          marginBottom: '1.75rem',
+          background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(99, 102, 241, 0.12))',
+          border: '1px solid rgba(245, 158, 11, 0.4)',
+          borderRadius: 'var(--radius-lg)',
+          boxShadow: '0 10px 30px -10px rgba(245, 158, 11, 0.2)',
+          flexWrap: 'wrap'
+        }}>
+          <div className="flex items-center gap-3">
+            <div style={{
+              width: 44,
+              height: 44,
+              borderRadius: 12,
+              background: 'rgba(245, 158, 11, 0.2)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#fbbf24',
+              flexShrink: 0
+            }}>
+              <Shield size={22} />
+            </div>
+            <div>
+              <h4 style={{ margin: '0 0 0.25rem 0', color: '#fef3c7', fontSize: '1rem', fontWeight: 700 }}>
+                Estás visualizando el módulo de pedidos como Administrador
+              </h4>
+              <p style={{ margin: 0, fontSize: '0.82rem', color: '#cbd5e1' }}>
+                Para gestionar productos (crear/editar stock), cambiar estados logísticos a Olva Courier o administrar roles de usuarios, abre la consola central.
+              </p>
+            </div>
+          </div>
+          <button 
+            className="btn-primary" 
+            onClick={onNavigateToAdmin}
+            style={{
+              background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+              color: '#0f172a',
+              fontWeight: 700,
+              boxShadow: '0 4px 15px rgba(245, 158, 11, 0.35)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            <Shield size={16} />
+            <span>Ir al Panel de Control Administrador</span>
+          </button>
+        </div>
+      )}
 
       {/* BANNER INFORMATIVO PARA MODO INVITADO */}
       {isGuest && (

@@ -47,8 +47,22 @@ export default function Navbar({
   const isAdmin = currentUser?.role === 'ROLE_ADMIN';
   const isInAdminMode = activeTab === 'admin';
 
-  // Navegación para clientes: Catálogo y Mis Pedidos únicamente
-  const customerNavItems = [
+  // Navegación condicional por roles: Clientes (Tienda y Pedidos) vs Administrador (+ Panel Admin)
+  const navItems = isAdmin ? [
+    { 
+      id: 'admin', 
+      label: '🛡️ Panel Admin', 
+      icon: <Shield size={17} className="text-amber-400" />,
+      isSpecial: true
+    },
+    { id: 'catalog', label: 'Tienda & Catálogo', icon: <Cpu size={17} /> },
+    { 
+      id: 'orders', 
+      label: 'Mis Pedidos', 
+      icon: <ClipboardList size={17} />, 
+      badge: ordersCount > 0 ? ordersCount : null 
+    }
+  ] : [
     { id: 'catalog', label: 'Tienda & Catálogo', icon: <Cpu size={17} /> },
     { 
       id: 'orders', 
@@ -163,14 +177,14 @@ export default function Navbar({
               </div>
             </div>
 
-            {/* Navigation Links para Clientes */}
+            {/* Navigation Links según el Rol (Clientes vs Administradores) */}
             <nav className="navbar-nav-links">
-              {customerNavItems.map((item) => {
+              {navItems.map((item) => {
                 const isActive = activeTab === item.id;
                 return (
                   <button
                     key={item.id}
-                    className={`nav-link-btn ${isActive ? 'active' : ''}`}
+                    className={`nav-link-btn ${isActive ? 'active' : ''} ${item.isSpecial ? 'nav-link-admin-highlight' : ''}`}
                     onClick={() => setActiveTab(item.id)}
                   >
                     <span className="nav-icon">{item.icon}</span>
