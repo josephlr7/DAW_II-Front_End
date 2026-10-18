@@ -75,6 +75,28 @@ export default function AdminDashboardView({
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Product Modal & Form States
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [updatingUserId, setUpdatingUserId] = useState(null);
+  const [productForm, setProductForm] = useState({
+    name: '',
+    shortName: '',
+    category: 'laptops',
+    categoryLabel: 'Laptops Gamer',
+    price: '',
+    originalPrice: '',
+    stock: 10,
+    sku: '',
+    image: '',
+    tag: '',
+    tagColor: 'indigo',
+    description: '',
+    rating: 5.0,
+    reviewsCount: 0
+  });
+
   // Map rápido de envíos por orderId
   const shippingsMap = React.useMemo(() => {
     const map = {};
