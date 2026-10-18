@@ -22,7 +22,7 @@ import {
   LogIn
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { identityApi, orderApi } from '../services/api';
+import { identityApi, orderApi, productApi } from '../services/api';
 import { guestOrdersStorage } from '../services/firebase';
 
 export default function CheckoutView({ 
@@ -191,6 +191,24 @@ export default function CheckoutView({
         guestOrdersStorage.saveUserOrder(currentUser.email || currentUser.username, orderRes.data);
       } else {
         guestOrdersStorage.addOrder(orderRes.data);
+      }
+
+      // Descontar stock real en Product-Service para cada producto comprado
+      try {
+        await Promise.allSettled(
+          activeItems.map(async (item) => {
+            if (item.product?.id) {
+              const currentStock = typeof item.product.stock === 'number' ? item.product.stock : 10;
+              const newStock = Math.max(0, currentStock - (item.quantity || 1));
+              await productApi.actualizarProducto(item.product.id, {
+                ...item.product,
+                stock: newStock
+              });
+            }
+          })
+        );
+      } catch (stockErr) {
+        console.warn('Error al descontar stock en Product-Service:', stockErr);
       }
 
       showToast(`¡Orden #${orderRes.data.id || 'OK'} procesada con éxito por los microservicios!`, 'success');
